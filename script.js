@@ -4,14 +4,12 @@ const addBtn = document.getElementById('addBtn');
 const todoList = document.getElementById('todoList');
 const emptyState = document.getElementById('emptyState');
 const clearBtn = document.getElementById('clearBtn');
-const filterBtns = document.querySelectorAll('.filter-btn');
 const totalTasksEl = document.getElementById('totalTasks');
 const completedTasksEl = document.getElementById('completedTasks');
 const pendingTasksEl = document.getElementById('pendingTasks');
 const todoDate = document.getElementById('todoDate');
 const todoTime = document.getElementById('todoTime');
 const clearDateTime = document.getElementById('clearDateTime');
-const resetBtn = document.getElementById('resetBtn');
 
 // State
 let todos = [];
@@ -40,18 +38,34 @@ function setupEventListeners() {
         showNotification('Tanggal dan waktu telah dihapus');
     });
 
-    resetBtn.addEventListener('click', resetToDummyData);
-
-    filterBtns.forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            filterBtns.forEach(b => b.classList.remove('active'));
-            e.target.closest('.filter-btn').classList.add('active');
-            currentFilter = e.target.closest('.filter-btn').dataset.filter;
-            renderTodos();
-        });
-    });
-
     clearBtn.addEventListener('click', clearCompletedTodos);
+    
+    // Event delegation untuk filter buttons - lebih reliable
+    document.addEventListener('click', function(e) {
+        const filterBtn = e.target.closest('.filter-btn');
+        if (filterBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            // Remove active dari semua buttons
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Tambah active ke yang diklik
+            filterBtn.classList.add('active');
+            
+            // Update filter
+            const filterValue = filterBtn.getAttribute('data-filter');
+            currentFilter = filterValue;
+            
+            console.log('Filter changed to:', currentFilter);
+            console.log('Todos count:', todos.length);
+            
+            // Render
+            renderTodos();
+        }
+    });
 }
 
 // Add Todo
@@ -133,57 +147,76 @@ function resetToDummyData() {
 
 // Render Todos
 function renderTodos() {
+    console.log('=== RENDER TODOS CALLED ===');
+    console.log('Current filter:', currentFilter);
+    console.log('Total todos in array:', todos.length);
+    
+    // Log each todo's status
+    todos.forEach((t, i) => {
+        console.log(`Todo ${i}: "${t.text}" - completed: ${t.completed}`);
+    });
+    
     todoList.innerHTML = '';
-
-    let filteredTodos = todos;
-
+    
+    // Filter todos based on currentFilter
+    let filtered = [];
+    
     if (currentFilter === 'completed') {
-        filteredTodos = todos.filter(t => t.completed);
+        filtered = todos.filter(t => t.completed === true);
+        console.log('COMPLETED filter: showing', filtered.length, 'todos');
     } else if (currentFilter === 'pending') {
-        filteredTodos = todos.filter(t => !t.completed);
+        filtered = todos.filter(t => t.completed === false);
+        console.log('PENDING filter: showing', filtered.length, 'todos');
+    } else {
+        filtered = [...todos];
+        console.log('ALL filter: showing', filtered.length, 'todos');
     }
 
-    if (filteredTodos.length === 0) {
+    // Show empty state if no todos
+    if (filtered.length === 0) {
         emptyState.classList.add('show');
         todoList.style.display = 'none';
-    } else {
-        emptyState.classList.remove('show');
-        todoList.style.display = 'block';
-
-        filteredTodos.forEach(todo => {
-            const li = document.createElement('li');
-            li.className = `todo-item ${todo.completed ? 'completed' : ''}`;
-            
-            let timeHtml = '';
-            if (todo.scheduledDate) {
-                const status = getTimeStatus(todo.scheduledDate);
-                const formattedDate = formatDate(todo.scheduledDate);
-                const timeText = todo.scheduledTime ? ` - ${todo.scheduledTime}` : '';
-                timeHtml = `
-                    <div class="todo-time">
-                        <i class="fas fa-calendar-alt"></i>
-                        <span>${formattedDate}${timeText}</span>
-                        <span class="time-badge ${status.class}">${status.label}</span>
-                    </div>
-                `;
-            }
-            
-            li.innerHTML = `
-                <div class="checkbox" onclick="toggleTodo(${todo.id})">
-                    <i class="fas fa-check"></i>
-                </div>
-                <div class="todo-content">
-                    <div class="todo-text">${escapeHtml(todo.text)}</div>
-                    <div class="todo-date">${todo.date}</div>
-                    ${timeHtml}
-                </div>
-                <button class="delete-btn" onclick="deleteTodo(${todo.id})" title="Hapus tugas">
-                    <i class="fas fa-trash"></i>
-                </button>
-            `;
-            todoList.appendChild(li);
-        });
+        updateStats();
+        return;
     }
+    
+    // Show todos
+    emptyState.classList.remove('show');
+    todoList.style.display = 'block';
+
+    filtered.forEach(todo => {
+        const li = document.createElement('li');
+        li.className = `todo-item ${todo.completed ? 'completed' : ''}`;
+        
+        let timeHtml = '';
+        if (todo.scheduledDate) {
+            const status = getTimeStatus(todo.scheduledDate);
+            const formattedDate = formatDate(todo.scheduledDate);
+            const timeText = todo.scheduledTime ? ` - ${todo.scheduledTime}` : '';
+            timeHtml = `
+                <div class="todo-time">
+                    <i class="fas fa-calendar-alt"></i>
+                    <span>${formattedDate}${timeText}</span>
+                    <span class="time-badge ${status.class}">${status.label}</span>
+                </div>
+            `;
+        }
+        
+        li.innerHTML = `
+            <div class="checkbox" onclick="toggleTodo(${todo.id})">
+                <i class="fas fa-check"></i>
+            </div>
+            <div class="todo-content">
+                <div class="todo-text">${escapeHtml(todo.text)}</div>
+                <div class="todo-date">${todo.date}</div>
+                ${timeHtml}
+            </div>
+            <button class="delete-btn" onclick="deleteTodo(${todo.id})" title="Hapus tugas">
+                <i class="fas fa-trash"></i>
+            </button>
+        `;
+        todoList.appendChild(li);
+    });
 
     updateStats();
 }
@@ -366,10 +399,12 @@ function showNotification(message) {
         position: fixed;
         top: 20px;
         right: 20px;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: rgba(99, 102, 241, 0.85);
+        backdrop-filter: blur(10px);
         color: white;
         padding: 14px 20px;
         border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
         box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
         font-size: 14px;
         font-weight: 500;
